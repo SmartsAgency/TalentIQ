@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smarts Talent Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        .spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 py-6">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900">Smarts Talent Portal</h1>
+                    <p class="text-gray-600 mt-1" id="talent-count">0 talent profiles</p>
+                </div>
+                <div class="flex space-x-4">
+                    <button id="admin-btn" class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium bg-white hover:bg-gray-50">
+                        🔧 Admin
+                    </button>
+                    <button id="export-btn" class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium bg-white hover:bg-gray-50">
+                        📥 Export
+                    </button>
+                    <div class="flex rounded-md">
+                        <button id="grid-view" class="px-4 py-2 text-sm font-medium rounded-l-md border bg-blue-50 border-blue-500 text-blue-700">
+                            Grid
+                        </button>
+                        <button id="list-view" class="px-4 py-2 text-sm font-medium rounded-r-md border-t border-b border-r bg-white border-gray-300 text-gray-700">
+                            List
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Panel -->
+    <div id="admin-panel" class="bg-blue-50 border-b border-blue-200 hidden">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h2 class="text-lg font-semibold text-blue-900">👥 Team Admin Panel</h2>
+                    <p class="text-sm text-blue-700">Changes are automatically saved</p>
+                </div>
+                <div class="flex space-x-3">
+                    <button id="add-talent-btn" class="px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700">
+                        ➕ Add Talent
+                    </button>
+                    <label for="file-upload" class="px-3 py-2 border border-blue-600 text-blue-600 text-sm rounded-md hover:bg-blue-50 cursor-pointer">
+                        📤 Upload Excel
+                        <input type="file" id="file-upload" accept=".xlsx,.xls" class="hidden">
+                    </label>
+                    <button id="reset-btn" class="px-3 py-2 border border-red-600 text-red-600 text-sm rounded-md hover:bg-red-50">
+                        🔄 Reset
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search and Filters -->
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <div class="mb-6 flex flex-wrap gap-4">
+            <div class="flex-1 min-w-64">
+                <div class="relative">
+                    <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">🔍</span>
+                    <input type="text" id="search-input" placeholder="Search talent, agencies, brands..." 
+                           class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                </div>
+            </div>
+            <select id="category-filter" class="px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                <option value="">All Categories</option>
+            </select>
+            <select id="location-filter" class="px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                <option value="">All Locations</option>
+            </select>
+            <button id="clear-filters" class="px-4 py-2 text-blue-600 hover:text-blue-800 text-sm">Clear Filters</button>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loading" class="text-center py-12">
+            <div class="spinner"></div>
+            <p class="mt-4 text-gray-600">Loading talent database...</p>
+        </div>
+
+        <!-- No Results -->
+        <div id="no-results" class="text-center py-12 hidden">
+            <div class="text-6xl mb-4">👤</div>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">No talent found</h3>
+            <p class="text-gray-600">Try adjusting your search or upload your talent database</p>
+        </div>
+
+        <!-- Talent Grid -->
+        <div id="talent-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 hidden"></div>
+        <div id="talent-list" class="space-y-4 hidden"></div>
+    </div>
+
+    <!-- Modal Background -->
+    <div id="modal-bg" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50">
+        <!-- Talent Detail Modal -->
+        <div id="talent-modal" class="fixed top-20 left-1/2 transform -translate-x-1/2 w-11/12 max-w-2xl bg-white rounded-lg shadow-lg p-6 hidden">
+            <div class="flex justify-between items-start mb-4">
+                <h3 id="modal-name" class="text-2xl font-bold text-gray-900"></h3>
+                <button id="close-modal" class="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
+            </div>
+            <div id="modal-content" class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm"></div>
+            <div id="modal-actions" class="mt-6 flex justify-end space-x-3"></div>
+        </div>
+
+        <!-- Add/Edit Form Modal -->
+        <div id="form-modal" class="fixed top-10 left-1/2 transform -translate-x-1/2 w-11/12 max-w-4xl bg-white rounded-lg shadow-lg p-6 hidden max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-start mb-6">
+                <h3 id="form-title" class="text-2xl font-bold text-gray-900">Add New Talent</h3>
+                <button id="close-form" class="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
+            </div>
+            <form id="talent-form" class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Name *</label>
+                        <input type="text" id="form-name" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Category *</label>
+                        <select id="form-category" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Select category...</option>
+                            <option value="CelebActor">Celebrity/Actor</option>
+                            <option value="Musicians">Musicians</option>
+                            <option value="Chefs">Chefs</option>
+                            <option value="Sports">Sports</option>
+                            <option value="Influencers">Influencers</option>
+                            <option value="Comedians">Comedians</option>
+                            <option value="Speakers">Speakers</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Agency</label>
+                        <input type="text" id="form-agency" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Agent</label>
+                        <input type="text" id="form-agent" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                        <input type="email" id="form-email" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                        <input type="tel" id="form-phone" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Location</label>
+                        <input type="text" id="form-location" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Pronouns</label>
+                        <input type="text" id="form-pronouns" placeholder="e.g., He/Him, She/Her, They/Them" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Rates</label>
+                        <input type="text" id="form-rates" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Link to Slide</label>
+                        <input type="url" id="form-link" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Brand Deals & History</label>
+                    <textarea id="form-brands" rows="4" placeholder="List previous brand partnerships, campaigns, etc." class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"></textarea>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" id="cancel-form" class="px-6 py-2 bg-gray-100 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-200">Cancel</button>
+                    <button type="submit" class="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700">💾 Save Talent</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let allTalent = [];
+        let filteredTalent = [];
+        let currentViewMode = 'grid';
+        let isAdminMode = false;
+        let editingTalent = null;
+
+        // Storage functions
+        function saveTalent(data) {
+            try {
+                localStorage.setItem('smarts_talent_data', JSON.stringify({
+                    talents: data,
+                    lastUpdated: new Date().toISOString()
+                }));
+                return true;
+            } catch (error) {
+                console.error('Error saving data:', error);
+                return false;
+            }
+        }
+
+        function loadTalent() {
+            try {
+                const stored = localStorage.getItem('smarts_talent_data');
+                if (!stored) return null;
+                const data = JSON.parse(stored);
+                return data.talents || [];
+            } catch (error) {
+                console.error('Error loading data:', error);
+                return null;
+            }
+        }
+
+        // Initialize with demo data
+        function initializeDemoData() {
+            const demoData = [
+                {
+                    id: 'demo-1',
+                    name: 'Demo Celebrity Actor',
+                    category: 'CelebActor',
+                    agency: 'Premier Talent Agency',
+                    agent: 'Sarah Johnson',
+                    email: 'sarah@premiertalent.com',
+                    location: 'Los Angeles, CA',
+                    phone: '+1-310-555-0123',
+                    rates: '$50,000/day',
+                    pronouns: 'They/Them',
+                    brandDeals: 'Nike Partnership 2024, Apple Commercial Series',
+                    linkToSlide: '',
+                    subcategory: ''
+                },
+                {
+                    id: 'demo-2',
+                    name: 'Demo Musician',
+                    category: 'Musicians',
+                    agency: 'Global Music Management',
+                    agent: 'Michael Chen',
+                    email: 'mchen@globalmusic.com',
+                    location: 'Nashville, TN',
+                    phone: '+1-615-555-0456',
+                    rates: '$25,000/performance',
+                    pronouns: 'She/Her',
+                    brandDeals: 'Spotify Exclusive Deal, Guitar Brand Ambassador',
+                    linkToSlide: '',
+                    subcategory: ''
+                },
+                {
+                    id: 'demo-3',
+                    name: 'Demo Chef',
+                    category: 'Chefs',
+                    agency: 'Culinary Stars Inc',
+                    agent: 'Emma Rodriguez',
+                    email: 'emma@culinarystars.com',
+                    location: 'New York, NY',
+                    phone: '+1-212-555-0789',
+                    rates: '$15,000/event',
+                    pronouns: 'He/Him',
+                    brandDeals: 'Food Network Show, Kitchen Equipment Partnership',
+                    linkToSlide: '',
+                    subcategory: ''
+                }
+            ];
+            return demoData;
+        }
+
+        // Load data on page load
+        function loadData() {
+            document.getElementById('loading').style.display = 'block';
+            
+            setTimeout(() => {
+                const savedData = loadTalent();
+                if (savedData && savedData.length > 0) {
+                    allTalent = savedData;
+                } else {
+                    allTalent = initializeDemoData();
+                    saveTalent(allTalent);
+                }
+                
+                filteredTalent = [...allTalent];
+                document.getElementById('loading').style.display = 'none';
+                updateDisplay();
+                updateFilters();
+            }, 500);
+        }
+
+        // Update talent count and display
+        function updateDisplay() {
+            const countEl = document.getElementById('talent-count');
+            countEl.textContent = `${filteredTalent.length} of ${allTalent.length} talent profiles`;
+
+            if (filteredTalent.length === 0) {
+                document.getElementById('no-results').style.display = 'block';
+                document.getElementById('talent-grid').style.display = 'none';
+                document.getElementById('talent-list').style.display = 'none';
+            } else {
+                document.getElementById('no-results').style.display = 'none';
+                if (currentViewMode === 'grid') {
+                    document.getElementById('talent-grid').style.display = 'grid';
+                    document.getElementById('talent-list').style.display = 'none';
+                    renderGrid();
+                } else {
+                    document.getElementById('talent-grid').style.display = 'none';
+                    document.getElementById('talent-list').style.display = 'block';
+                    renderList();
+                }
+            }
+        }
+
+        // Render grid view
+        function renderGrid() {
+            const gridEl = document.getElementById('talent-grid');
+            gridEl.innerHTML = '';
+
+            filteredTalent.forEach(talent => {
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer border p-6';
+                card.onclick = () => showTalentModal(talent);
+
+                card.innerHTML = `
+                    <div class="flex items-start justify-between mb-3">
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900 hover:text-blue-600">${talent.name}</h3>
+                            <div class="flex items-center mt-1">
+                                <span class="text-gray-400 mr-1">🏷️</span>
+                                <span class="text-sm text-gray-600">${talent.category}</span>
+                                ${talent.subcategory ? `<span class="text-sm text-gray-500"> • ${talent.subcategory}</span>` : ''}
+                            </div>
+                        </div>
+                        <span class="text-gray-400">👁️</span>
+                    </div>
+                    <div class="space-y-2">
+                        ${talent.agency ? `<div class="flex items-center text-sm text-gray-600">
+                            <span class="font-medium mr-2">Agency:</span>
+                            <span>${talent.agency}</span>
+                        </div>` : ''}
+                        ${talent.agent ? `<div class="flex items-center text-sm text-gray-600">
+                            <span class="text-gray-400 mr-2">👤</span>
+                            <span>${talent.agent}</span>
+                        </div>` : ''}
+                        ${talent.location ? `<div class="flex items-center text-sm text-gray-600">
+                            <span class="text-gray-400 mr-2">📍</span>
+                            <span>${talent.location}</span>
+                        </div>` : ''}
+                        ${talent.brandDeals ? `<div class="flex items-center text-sm text-gray-600">
+                            <span class="text-gray-400 mr-2">⭐</span>
+                            <span class="truncate">${talent.brandDeals}</span>
+                        </div>` : ''}
+                    </div>
+                `;
+                gridEl.appendChild(card);
+            });
+        }
+
+        // Render list view
+        function renderList() {
+            const listEl = document.getElementById('talent-list');
+            listEl.innerHTML = '';
+
+            filteredTalent.forEach(talent => {
+                const item = document.createElement('div');
+                item.className = 'bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer border p-4';
+                item.onclick = () => showTalentModal(talent);
+
+                item.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1">
+                            <div class="flex items-start justify-between mb-3">
+                                <div>
+                                    <h3 class="text-lg font-semibold text-gray-900 hover:text-blue-600">${talent.name}</h3>
+                                    <div class="flex items-center mt-1">
+                                        <span class="text-gray-400 mr-1">🏷️</span>
+                                        <span class="text-sm text-gray-600">${talent.category}</span>
+                                    </div>
+                                </div>
+                                <span class="text-gray-400">👁️</span>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-gray-600">
+                                <div>${talent.agency || 'No agency listed'}</div>
+                                <div>${talent.agent || 'No agent listed'}</div>
+                                <div>${talent.location || 'No location listed'}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                listEl.appendChild(item);
+            });
+        }
+
+        // Show talent detail modal
+        function showTalentModal(talent) {
+            document.getElementById('modal-name').textContent = talent.name;
+            
+            const content = document.getElementById('modal-content');
+            content.innerHTML = `
+                <div><strong>Category:</strong> ${talent.category}</div>
+                <div><strong>Agency:</strong> ${talent.agency || 'N/A'}</div>
+                <div><strong>Agent:</strong> ${talent.agent || 'N/A'}</div>
+                <div><strong>Location:</strong> ${talent.location || 'N/A'}</div>
+                <div><strong>Email:</strong> ${talent.email ? `<a href="mailto:${talent.email}" class="text-blue-600 hover:text-blue-800">${talent.email}</a>` : 'N/A'}</div>
+                <div><strong>Phone:</strong> ${talent.phone ? `<a href="tel:${talent.phone}" class="text-blue-600 hover:text-blue-800">${talent.phone}</a>` : 'N/A'}</div>
+                <div><strong>Pronouns:</strong> ${talent.pronouns || 'N/A'}</div>
+                <div><strong>Rates:</strong> ${talent.rates || 'N/A'}</div>
+            `;
+
+            if (talent.brandDeals) {
+                content.innerHTML += `<div class="col-span-2 mt-4"><strong>Brand Deals:</strong><br><div class="bg-gray-50 p-3 rounded mt-1">${talent.brandDeals}</div></div>`;
+            }
+
+            const actions = document.getElementById('modal-actions');
+            actions.innerHTML = `
+                <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-200">Close</button>
+                ${isAdminMode ? `<button onclick="editTalent('${talent.id}')" class="px-4 py-2 bg-yellow-600 text-white text-sm font-medium rounded-md hover:bg-yellow-700">✏️ Edit</button>
+                <button onclick="deleteTalent('${talent.id}')" class="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700">🗑️ Delete</button>` : ''}
+                ${talent.email ? `<a href="mailto:${talent.email}?subject=Inquiry about ${talent.name}" class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700">📧 Contact</a>` : ''}
+            `;
+
+            document.getElementById('modal-bg').style.display = 'block';
+            document.getElementById('talent-modal').style.display = 'block';
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('modal-bg').style.display = 'none';
+            document.getElementById('talent-modal').style.display = 'none';
+            document.getElementById('form-modal').style.display = 'none';
+        }
+
+        // Update filter dropdowns
+        function updateFilters() {
+            const categories = [...new Set(allTalent.map(t => t.category))].sort();
+            const locations = [...new Set(allTalent.map(t => t.location).filter(l => l))].sort();
+
+            const categoryFilter = document.getElementById('category-filter');
+            categoryFilter.innerHTML = '<option value="">All Categories</option>';
+            categories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.textContent = `${cat} (${allTalent.filter(t => t.category === cat).length})`;
+                categoryFilter.appendChild(option);
+            });
+
+            const locationFilter = document.getElementById('location-filter');
+            locationFilter.innerHTML = '<option value="">All Locations</option>';
+            locations.forEach(loc => {
+                const option = document.createElement('option');
+                option.value = loc;
+                option.textContent = `${loc} (${allTalent.filter(t => t.location === loc).length})`;
+                locationFilter.appendChild(option);
+            });
+        }
+
+        // Filter talents
+        function filterTalents() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            const categoryFilter = document.getElementById('category-filter').value;
+            const locationFilter = document.getElementById('location-filter').value;
+
+            filteredTalent = allTalent.filter(talent => {
+                const matchesSearch = !searchTerm || 
+                    talent.name.toLowerCase().includes(searchTerm) ||
+                    talent.agency.toLowerCase().includes(searchTerm) ||
+                    talent.agent.toLowerCase().includes(searchTerm) ||
+                    talent.brandDeals.toLowerCase().includes(searchTerm);
+                
+                const matchesCategory = !categoryFilter || talent.category === categoryFilter;
+                const matchesLocation = !locationFilter || talent.location === locationFilter;
+
+                return matchesSearch && matchesCategory && matchesLocation;
+            });
+
+            updateDisplay();
+        }
+
+        // Export data
+        function exportData() {
+            const csvContent = [
+                ['Name', 'Category', 'Agency', 'Agent', 'Email', 'Location', 'Phone', 'Pronouns', 'Brand Deals'],
+                ...filteredTalent.map(t => [
+                    t.name, t.category, t.agency, t.agent, t.email, t.location, t.phone, t.pronouns, t.brandDeals
+                ])
+            ].map(row => row.map(field => `"${field || ''}"`).join(',')).join('\n');
+            
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `talent-export-${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+
+        // Show add/edit form
+        function showForm(talent = null) {
+            editingTalent = talent;
+            document.getElementById('form-title').textContent = talent ? 'Edit Talent' : 'Add New Talent';
+            
+            // Clear form
+            document.getElementById('talent-form').reset();
+            
+            if (talent) {
+                document.getElementById('form-name').value = talent.name || '';
+                document.getElementById('form-category').value = talent.category || '';
+                document.getElementById('form-agency').value = talent.agency || '';
+                document.getElementById('form-agent').value = talent.agent || '';
+                document.getElementById('form-email').value = talent.email || '';
+                document.getElementById('form-phone').value = talent.phone || '';
+                document.getElementById('form-location').value = talent.location || '';
+                document.getElementById('form-pronouns').value = talent.pronouns || '';
+                document.getElementById('form-rates').value = talent.rates || '';
+                document.getElementById('form-link').value = talent.linkToSlide || '';
+                document.getElementById('form-brands').value = talent.brandDeals || '';
+            }
+
+            document.getElementById('modal-bg').style.display = 'block';
+            document.getElementById('form-modal').style.display = 'block';
+        }
+
+        // Save talent
+        function saveTalentForm(formData) {
+            if (editingTalent) {
+                // Update existing
+                const index = allTalent.findIndex(t => t.id === editingTalent.id);
+                if (index !== -1) {
+                    allTalent[index] = { ...editingTalent, ...formData };
+                }
+            } else {
+                // Add new
+                const newTalent = {
+                    id: `talent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    ...formData
+                };
+                allTalent.push(newTalent);
+            }
+
+            saveTalent(allTalent);
+            filterTalents();
+            updateFilters();
+            closeModal();
+            editingTalent = null;
+        }
+
+        // Delete talent
+        function deleteTalent(id) {
+            if (confirm('Are you sure you want to delete this talent profile?')) {
+                allTalent = allTalent.filter(t => t.id !== id);
+                saveTalent(allTalent);
+                filterTalents();
+                updateFilters();
+                closeModal();
+            }
+        }
+
+        // Edit talent
+        function editTalent(id) {
+            const talent = allTalent.find(t => t.id === id);
+            if (talent) {
+                closeModal();
+                showForm(talent);
+            }
+        }
+
+        // Handle file upload
+        function handleFileUpload(file) {
+            if (!file) return;
+
+            document.getElementById('loading').style.display = 'block';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    let newData = [];
+                    
+                    workbook.SheetNames.forEach(sheetName => {
+                        if (sheetName !== 'Sources') {
+                            const worksheet = workbook.Sheets[sheetName];
+                            const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                            
+                            jsonData.forEach(record => {
+                                const name = record['Name '] || record['Name'] || record['name'] || '';
+                                if (name.trim()) {
+                                    newData.push({
+                                        id: `${sheetName}-${name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                                        name: name.toString().trim(),
+                                        category: sheetName,
+                                        agency: (record['Agency '] || record['Agency'] || '').toString().trim(),
+                                        agent: (record['Agent '] || record['Agent'] || '').toString().trim(),
+                                        email: (record['Email '] || record['Email'] || '').toString().trim(),
+                                        location: (record['Location '] || record['Location'] || '').toString().trim(),
+                                        phone: (record['Phone '] || record['Phone'] || '').toString().trim(),
+                                        rates: (record['Rates '] || record['Rates'] || '').toString().trim(),
+                                        pronouns: (record['Talent Pronouns '] || record['Pronouns'] || '').toString().trim(),
+                                        brandDeals: (record['Brand Deals '] || record['Brand_Deals'] || '').toString().trim(),
+                                        linkToSlide: (record['Link to slide '] || record['Link_to_slide'] || '').toString().trim(),
+                                        subcategory: (record['Category'] || record['Subcategory'] || '').toString().trim()
+                                    });
+                                }
+                            });
+                        }
+                    });
+                    
+                    allTalent = newData;
+                    saveTalent(allTalent);
+                    filterTalents();
+                    updateFilters();
+                    document.getElementById('loading').style.display = 'none';
+                    alert(`Successfully loaded ${newData.length} talent records!`);
+                } catch (error) {
+                    console.error('Error processing file:', error);
+                    document.getElementById('loading').style.display = 'none';
+                    alert('Error processing file. Please check the format and try again.');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            loadData();
+
+            // Admin toggle
+            document.getElementById('admin-btn').addEventListener('click', function() {
+                isAdminMode = !isAdminMode;
+                const panel = document.getElementById('admin-panel');
+                const btn = document.getElementById('admin-btn');
+                
+                if (isAdminMode) {
+                    panel.style.display = 'block';
+                    btn.className = 'px-4 py-2 border border-blue-500 rounded-md text-sm font-medium bg-blue-50 text-blue-700';
+                } else {
+                    panel.style.display = 'none';
+                    btn.className = 'px-4 py-2 border border-gray-300 rounded-md text-sm font-medium bg-white hover:bg-gray-50 text-gray-700';
+                }
+            });
+
+            // View mode toggles
+            document.getElementById('grid-view').addEventListener('click', function() {
+                currentViewMode = 'grid';
+                document.getElementById('grid-view').className = 'px-4 py-2 text-sm font-medium rounded-l-md border bg-blue-50 border-blue-500 text-blue-700';
+                document.getElementById('list-view').className = 'px-4 py-2 text-sm font-medium rounded-r-md border-t border-b border-r bg-white border-gray-300 text-gray-700';
+                updateDisplay();
+            });
+
+            document.getElementById('list-view').addEventListener('click', function() {
+                currentViewMode = 'list';
+                document.getElementById('list-view').className = 'px-4 py-2 text-sm font-medium rounded-r-md border bg-blue-50 border-blue-500 text-blue-700';
+                document.getElementById('grid-view').className = 'px-4 py-2 text-sm font-medium rounded-l-md border-t border-b border-l bg-white border-gray-300 text-gray-700';
+                updateDisplay();
+            });
+
+            // Search and filter
+            document.getElementById('search-input').addEventListener('input', filterTalents);
+            document.getElementById('category-filter').addEventListener('change', filterTalents);
+            document.getElementById('location-filter').addEventListener('change', filterTalents);
+            
+            document.getElementById('clear-filters').addEventListener('click', function() {
+                document.getElementById('search-input').value = '';
+                document.getElementById('category-filter').value = '';
+                document.getElementById('location-filter').value = '';
+                filterTalents();
+            });
+
+            // Export button
+            document.getElementById('export-btn').addEventListener('click', exportData);
+
+            // Admin actions
+            document.getElementById('add-talent-btn').addEventListener('click', () => showForm());
+            document.getElementById('reset-btn').addEventListener('click', function() {
+                if (confirm('Clear all data? This cannot be undone.')) {
+                    localStorage.removeItem('smarts_talent_data');
+                    window.location.reload();
+                }
+            });
+
+            // File upload
+            document.getElementById('file-upload').addEventListener('change', function(e) {
+                if (e.target.files[0]) {
+                    handleFileUpload(e.target.files[0]);
+                    e.target.value = '';
+                }
+            });
+
+            // Modal close buttons
+            document.getElementById('close-modal').addEventListener('click', closeModal);
+            document.getElementById('close-form').addEventListener('click', closeModal);
+            document.getElementById('cancel-form').addEventListener('click', closeModal);
+
+            // Form submission
+            document.getElementById('talent-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const formData = {
+                    name: document.getElementById('form-name').value.trim(),
+                    category: document.getElementById('form-category').value,
+                    agency: document.getElementById('form-agency').value.trim(),
+                    agent: document.getElementById('form-agent').value.trim(),
+                    email: document.getElementById('form-email').value.trim(),
+                    phone: document.getElementById('form-phone').value.trim(),
+                    location: document.getElementById('form-location').value.trim(),
+                    pronouns: document.getElementById('form-pronouns').value.trim(),
+                    rates: document.getElementById('form-rates').value.trim(),
+                    linkToSlide: document.getElementById('form-link').value.trim(),
+                    brandDeals: document.getElementById('form-brands').value.trim(),
+                    subcategory: ''
+                };
+
+                if (!formData.name) {
+                    alert('Name is required');
+                    return;
+                }
+
+                saveTalentForm(formData);
+            });
+
+            // Click outside modal to close
+            document.getElementById('modal-bg').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closeModal();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
