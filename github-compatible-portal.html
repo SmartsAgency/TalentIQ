@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smarts Talent Portal</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body class="bg-gray-100">
+    <!-- Header -->
+    <header class="bg-white shadow">
+        <div class="max-w-7xl mx-auto px-4 py-6">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900">Smarts Talent Portal</h1>
+                    <p class="text-gray-600 mt-1" id="talent-count">Loading...</p>
+                </div>
+                <div class="flex gap-2">
+                    <button id="admin-btn" class="btn-secondary">🔧 Admin</button>
+                    <button id="export-btn" class="btn-secondary">📥 Export</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Admin Panel -->
+    <div id="admin-panel" class="bg-blue-50 border-b hidden">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-blue-900">👥 Admin Panel</h2>
+                <div class="flex gap-2">
+                    <button id="add-talent-btn" class="btn-primary">➕ Add Talent</button>
+                    <label for="file-upload" class="btn-secondary cursor-pointer">
+                        📤 Upload Excel
+                        <input type="file" id="file-upload" accept=".xlsx,.xls" class="hidden">
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Section -->
+    <div class="max-w-7xl mx-auto px-4 py-6">
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="md:col-span-2">
+                    <input type="text" id="search-input" placeholder="🔍 Search talent, agencies, brands..." 
+                           class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div>
+                    <select id="category-filter" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="">All Categories</option>
+                    </select>
+                </div>
+                <div>
+                    <button id="clear-filters" class="w-full btn-secondary">Clear Filters</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results -->
+        <div id="loading" class="text-center py-12">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <p class="mt-4 text-gray-600">Loading talent database...</p>
+        </div>
+
+        <div id="no-results" class="text-center py-12 hidden">
+            <div class="text-6xl mb-4">👤</div>
+            <h3 class="text-xl font-medium text-gray-900 mb-2">No talent found</h3>
+            <p class="text-gray-600">Try adjusting your search or upload your database</p>
+        </div>
+
+        <div id="talent-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden"></div>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg max-w-2xl w-full max-h-screen overflow-y-auto">
+                <div class="p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 id="modal-title" class="text-2xl font-bold text-gray-900"></h2>
+                        <button id="close-modal" class="text-gray-500 hover:text-gray-700 text-2xl">×</button>
+                    </div>
+                    <div id="modal-content"></div>
+                    <div id="modal-actions" class="mt-6 flex justify-end gap-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .btn-primary {
+            @apply px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors;
+        }
+        .btn-secondary {
+            @apply px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors;
+        }
+        .talent-card {
+            @apply bg-white rounded-lg shadow hover:shadow-md transition-shadow cursor-pointer p-6;
+        }
+    </style>
+
+    <script>
+        // Initialize app
+        let talents = [];
+        let filteredTalents = [];
+        let isAdmin = false;
+        let editingTalent = null;
+
+        // Demo data
+        const demoData = [
+            {
+                id: '1',
+                name: 'Emma Stone',
+                category: 'Actor',
+                agency: 'CAA',
+                agent: 'Sarah Johnson',
+                email: 'sarah@caa.com',
+                phone: '+1-310-123-4567',
+                location: 'Los Angeles, CA',
+                rates: '$500K/film',
+                pronouns: 'She/Her',
+                brandDeals: 'Louis Vuitton Ambassador, Revlon Spokeswoman'
+            },
+            {
+                id: '2',
+                name: 'John Legend',
+                category: 'Musician',
+                agency: 'WME',
+                agent: 'Michael Chen',
+                email: 'mchen@wmeagency.com',
+                phone: '+1-310-987-6543',
+                location: 'Los Angeles, CA',
+                rates: '$150K/performance',
+                pronouns: 'He/Him',
+                brandDeals: 'Google Assistant, Pampers Partnership'
+            },
+            {
+                id: '3',
+                name: 'Gordon Ramsay',
+                category: 'Chef',
+                agency: 'Roar Global',
+                agent: 'Lisa Rodriguez',
+                email: 'lisa@roarglobal.com',
+                phone: '+44-20-1234-5678',
+                location: 'London, UK',
+                rates: '$75K/event',
+                pronouns: 'He/Him',
+                brandDeals: 'MasterClass, HexClad Cookware'
+            }
+        ];
+
+        // Storage functions
+        function saveData() {
+            try {
+                localStorage.setItem('talents', JSON.stringify(talents));
+                return true;
+            } catch (e) {
+                console.error('Could not save data', e);
+                return false;
+            }
+        }
+
+        function loadData() {
+            try {
+                const saved = localStorage.getItem('talents');
+                return saved ? JSON.parse(saved) : demoData;
+            } catch (e) {
+                console.error('Could not load data', e);
+                return demoData;
+            }
+        }
+
+        // Initialize
+        function init() {
+            talents = loadData();
+            filteredTalents = [...talents];
+            updateDisplay();
+            updateFilters();
+            hideLoading();
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').classList.add('hidden');
+        }
+
+        function updateDisplay() {
+            const count = document.getElementById('talent-count');
+            count.textContent = `${filteredTalents.length} talent profiles`;
+
+            const grid = document.getElementById('talent-grid');
+            const noResults = document.getElementById('no-results');
+
+            if (filteredTalents.length === 0) {
+                grid.classList.add('hidden');
+                noResults.classList.remove('hidden');
+            } else {
+                noResults.classList.add('hidden');
+                grid.classList.remove('hidden');
+                renderTalents();
+            }
+        }
+
+        function renderTalents() {
+            const grid = document.getElementById('talent-grid');
+            grid.innerHTML = '';
+
+            filteredTalents.forEach(talent => {
+                const card = document.createElement('div');
+                card.className = 'talent-card';
+                card.onclick = () => showTalentModal(talent);
+                
+                card.innerHTML = `
+                    <div class="mb-4">
+                        <h3 class="text-xl font-semibold text-gray-900">${talent.name}</h3>
+                        <p class="text-blue-600 font-medium">${talent.category}</p>
+                    </div>
+                    <div class="space-y-2 text-sm text-gray-600">
+                        ${talent.agency ? `<div><strong>Agency:</strong> ${talent.agency}</div>` : ''}
+                        ${talent.agent ? `<div><strong>Agent:</strong> ${talent.agent}</div>` : ''}
+                        ${talent.location ? `<div><strong>Location:</strong> ${talent.location}</div>` : ''}
+                        ${talent.rates ? `<div><strong>Rates:</strong> ${talent.rates}</div>` : ''}
+                    </div>
+                    <div class="mt-4 text-right">
+                        <span class="text-blue-500 text-sm">View Details →</span>
+                    </div>
+                `;
+                
+                grid.appendChild(card);
+            });
+        }
+
+        function updateFilters() {
+            const categories = [...new Set(talents.map(t => t.category))];
+            const categoryFilter = document.getElementById('category-filter');
+            
+            categoryFilter.innerHTML = '<option value="">All Categories</option>';
+            categories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.textContent = cat;
+                categoryFilter.appendChild(option);
+            });
+        }
+
+        function filterTalents() {
+            const search = document.getElementById('search-input').value.toLowerCase();
+            const category = document.getElementById('category-filter').value;
+
+            filteredTalents = talents.filter(talent => {
+                const matchesSearch = !search || 
+                    talent.name.toLowerCase().includes(search) ||
+                    (talent.agency && talent.agency.toLowerCase().includes(search)) ||
+                    (talent.agent && talent.agent.toLowerCase().includes(search)) ||
+                    (talent.brandDeals && talent.brandDeals.toLowerCase().includes(search));
+                
+                const matchesCategory = !category || talent.category === category;
+                
+                return matchesSearch && matchesCategory;
+            });
+
+            updateDisplay();
+        }
+
+        function showTalentModal(talent) {
+            document.getElementById('modal-title').textContent = talent.name;
+            
+            const content = document.getElementById('modal-content');
+            content.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div><strong>Category:</strong> ${talent.category}</div>
+                    <div><strong>Agency:</strong> ${talent.agency || 'N/A'}</div>
+                    <div><strong>Agent:</strong> ${talent.agent || 'N/A'}</div>
+                    <div><strong>Location:</strong> ${talent.location || 'N/A'}</div>
+                    <div><strong>Email:</strong> ${talent.email ? `<a href="mailto:${talent.email}" class="text-blue-600">${talent.email}</a>` : 'N/A'}</div>
+                    <div><strong>Phone:</strong> ${talent.phone ? `<a href="tel:${talent.phone}" class="text-blue-600">${talent.phone}</a>` : 'N/A'}</div>
+                    <div><strong>Pronouns:</strong> ${talent.pronouns || 'N/A'}</div>
+                    <div><strong>Rates:</strong> ${talent.rates || 'N/A'}</div>
+                </div>
+                ${talent.brandDeals ? `
+                    <div class="mt-4">
+                        <strong>Brand Deals:</strong>
+                        <div class="bg-gray-50 p-3 rounded mt-2">${talent.brandDeals}</div>
+                    </div>
+                ` : ''}
+            `;
+
+            const actions = document.getElementById('modal-actions');
+            actions.innerHTML = `
+                <button onclick="closeModal()" class="btn-secondary">Close</button>
+                ${isAdmin ? `
+                    <button onclick="editTalent('${talent.id}')" class="btn-secondary">✏️ Edit</button>
+                    <button onclick="deleteTalent('${talent.id}')" class="btn-secondary text-red-600">🗑️ Delete</button>
+                ` : ''}
+                ${talent.email ? `<a href="mailto:${talent.email}" class="btn-primary">📧 Contact</a>` : ''}
+            `;
+
+            document.getElementById('modal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+        }
+
+        function showAddForm() {
+            editingTalent = null;
+            showForm();
+        }
+
+        function editTalent(id) {
+            editingTalent = talents.find(t => t.id === id);
+            closeModal();
+            showForm();
+        }
+
+        function showForm() {
+            const isEditing = editingTalent !== null;
+            document.getElementById('modal-title').textContent = isEditing ? 'Edit Talent' : 'Add Talent';
+            
+            const content = document.getElementById('modal-content');
+            content.innerHTML = `
+                <form id="talent-form" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Name *</label>
+                            <input type="text" id="form-name" required class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Category *</label>
+                            <select id="form-category" required class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500">
+                                <option value="">Select...</option>
+                                <option value="Actor">Actor</option>
+                                <option value="Musician">Musician</option>
+                                <option value="Chef">Chef</option>
+                                <option value="Influencer">Influencer</option>
+                                <option value="Sports">Sports</option>
+                                <option value="Comedian">Comedian</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Agency</label>
+                            <input type="text" id="form-agency" class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Agent</label>
+                            <input type="text" id="form-agent" class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Email</label>
+                            <input type="email" id="form-email" class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Phone</label>
+                            <input type="tel" id="form-phone" class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Location</label>
+                            <input type="text" id="form-location" class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Pronouns</label>
+                            <input type="text" id="form-pronouns" class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Rates</label>
+                            <input type="text" id="form-rates" class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Brand Deals</label>
+                        <textarea id="form-brandDeals" rows="3" class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"></textarea>
+                    </div>
+                </form>
+            `;
+
+            // Fill form if editing
+            if (isEditing) {
+                document.getElementById('form-name').value = editingTalent.name || '';
+                document.getElementById('form-category').value = editingTalent.category || '';
+                document.getElementById('form-agency').value = editingTalent.agency || '';
+                document.getElementById('form-agent').value = editingTalent.agent || '';
+                document.getElementById('form-email').value = editingTalent.email || '';
+                document.getElementById('form-phone').value = editingTalent.phone || '';
+                document.getElementById('form-location').value = editingTalent.location || '';
+                document.getElementById('form-pronouns').value = editingTalent.pronouns || '';
+                document.getElementById('form-rates').value = editingTalent.rates || '';
+                document.getElementById('form-brandDeals').value = editingTalent.brandDeals || '';
+            }
+
+            const actions = document.getElementById('modal-actions');
+            actions.innerHTML = `
+                <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
+                <button type="button" onclick="saveTalent()" class="btn-primary">💾 Save</button>
+            `;
+
+            document.getElementById('modal').classList.remove('hidden');
+        }
+
+        function saveTalent() {
+            const form = document.getElementById('talent-form');
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                return;
+            }
+
+            const formData = {
+                name: document.getElementById('form-name').value.trim(),
+                category: document.getElementById('form-category').value,
+                agency: document.getElementById('form-agency').value.trim(),
+                agent: document.getElementById('form-agent').value.trim(),
+                email: document.getElementById('form-email').value.trim(),
+                phone: document.getElementById('form-phone').value.trim(),
+                location: document.getElementById('form-location').value.trim(),
+                pronouns: document.getElementById('form-pronouns').value.trim(),
+                rates: document.getElementById('form-rates').value.trim(),
+                brandDeals: document.getElementById('form-brandDeals').value.trim(),
+            };
+
+            if (editingTalent) {
+                // Update existing
+                Object.assign(editingTalent, formData);
+            } else {
+                // Add new
+                const newTalent = {
+                    id: Date.now().toString(),
+                    ...formData
+                };
+                talents.push(newTalent);
+            }
+
+            saveData();
+            filteredTalents = [...talents];
+            updateDisplay();
+            updateFilters();
+            closeModal();
+        }
+
+        function deleteTalent(id) {
+            if (confirm('Delete this talent profile?')) {
+                talents = talents.filter(t => t.id !== id);
+                saveData();
+                filteredTalents = [...talents];
+                updateDisplay();
+                updateFilters();
+                closeModal();
+            }
+        }
+
+        function exportData() {
+            const csv = [
+                ['Name', 'Category', 'Agency', 'Agent', 'Email', 'Phone', 'Location'],
+                ...filteredTalents.map(t => [
+                    t.name, t.category, t.agency || '', t.agent || '', 
+                    t.email || '', t.phone || '', t.location || ''
+                ])
+            ].map(row => row.map(field => `"${field}"`).join(',')).join('\n');
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `talents-${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function handleFileUpload(file) {
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    
+                    let newTalents = [];
+                    workbook.SheetNames.forEach(sheetName => {
+                        if (sheetName.toLowerCase() !== 'sources') {
+                            const sheet = workbook.Sheets[sheetName];
+                            const jsonData = XLSX.utils.sheet_to_json(sheet);
+                            
+                            jsonData.forEach((row, index) => {
+                                const name = row['Name '] || row['Name'] || row.name;
+                                if (name && name.toString().trim()) {
+                                    newTalents.push({
+                                        id: `${sheetName}-${index}-${Date.now()}`,
+                                        name: name.toString().trim(),
+                                        category: sheetName,
+                                        agency: (row['Agency '] || row['Agency'] || '').toString().trim(),
+                                        agent: (row['Agent '] || row['Agent'] || '').toString().trim(),
+                                        email: (row['Email '] || row['Email'] || '').toString().trim(),
+                                        phone: (row['Phone '] || row['Phone'] || '').toString().trim(),
+                                        location: (row['Location '] || row['Location'] || '').toString().trim(),
+                                        pronouns: (row['Talent Pronouns '] || row['Pronouns'] || '').toString().trim(),
+                                        rates: (row['Rates '] || row['Rates'] || '').toString().trim(),
+                                        brandDeals: (row['Brand Deals '] || row['Brand_Deals'] || '').toString().trim(),
+                                    });
+                                }
+                            });
+                        }
+                    });
+                    
+                    if (newTalents.length > 0) {
+                        talents = newTalents;
+                        saveData();
+                        filteredTalents = [...talents];
+                        updateDisplay();
+                        updateFilters();
+                        alert(`Successfully loaded ${newTalents.length} talent records!`);
+                    } else {
+                        alert('No valid talent data found in the file.');
+                    }
+                } catch (error) {
+                    console.error('File processing error:', error);
+                    alert('Error processing file. Please check the format.');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            init();
+
+            // Admin toggle
+            document.getElementById('admin-btn').addEventListener('click', function() {
+                isAdmin = !isAdmin;
+                const panel = document.getElementById('admin-panel');
+                const btn = this;
+                
+                if (isAdmin) {
+                    panel.classList.remove('hidden');
+                    btn.classList.add('bg-blue-100', 'text-blue-700');
+                } else {
+                    panel.classList.add('hidden');
+                    btn.classList.remove('bg-blue-100', 'text-blue-700');
+                }
+            });
+
+            // Search and filters
+            document.getElementById('search-input').addEventListener('input', filterTalents);
+            document.getElementById('category-filter').addEventListener('change', filterTalents);
+            document.getElementById('clear-filters').addEventListener('click', function() {
+                document.getElementById('search-input').value = '';
+                document.getElementById('category-filter').value = '';
+                filterTalents();
+            });
+
+            // Buttons
+            document.getElementById('export-btn').addEventListener('click', exportData);
+            document.getElementById('add-talent-btn').addEventListener('click', showAddForm);
+            document.getElementById('close-modal').addEventListener('click', closeModal);
+            
+            // File upload
+            document.getElementById('file-upload').addEventListener('change', function(e) {
+                if (e.target.files[0]) {
+                    handleFileUpload(e.target.files[0]);
+                    e.target.value = '';
+                }
+            });
+
+            // Close modal on backdrop click
+            document.getElementById('modal').addEventListener('click', function(e) {
+                if (e.target === this) closeModal();
+            });
+        });
+
+        // Global functions for inline onclick
+        window.closeModal = closeModal;
+        window.editTalent = editTalent;
+        window.deleteTalent = deleteTalent;
+        window.saveTalent = saveTalent;
+    </script>
+</body>
+</html>
